@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1"/>
-<title>Ajuste Geodésico · Pipeline RINEX — gfzrnx + teqc</title>
+<title>Ajuste Geodésico · Pipeline RINEX v4 — gfzrnx + teqc</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,200..900&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet"/>
@@ -313,7 +313,7 @@ catch(err){m.textContent='No se pudo conectar con Google Sheets'}b.disabled=fals
     <section class="step">
       <div class="step-h"><span class="n">03</span><h2>Parámetros</h2></div>
       <div class="param"><label for="pRuta">ruta en cmd</label><input id="pRuta" value="" placeholder="E:\...\rinex\base\PTSI" spellcheck="false"/></div>
-      <div class="param"><label for="pObs">tipos a conservar</label><input id="pObs" value="C1L1L2P2" spellcheck="false"/></div>
+      <div class="param" id="teqcObsParam"><label for="pObs">tipos a conservar · solo teqc</label><input id="pObs" value="C1L1L2P2" spellcheck="false"/></div>
       <div class="param"><label for="pChk">sufijo chk</label><input id="pChk" value="_chk" spellcheck="false"/></div>
       <div class="param"><label for="pTqc">sufijo teqc</label><input id="pTqc" value="teqc" spellcheck="false"/></div>
     </section>
@@ -325,7 +325,7 @@ catch(err){m.textContent='No se pudo conectar con Google Sheets'}b.disabled=fals
     <div class="strip">
       <div class="snode" id="nSrc"><span class="t">entrada</span><span class="v">—</span></div>
       <span class="slink">›</span>
-      <div class="snode" id="nChk"><span class="t">gfzrnx −chk</span><span class="v">-chk -kv -f</span></div>
+      <div class="snode" id="nChk"><span class="t">gfzrnx −chk</span><span class="v">-chk -kv -f · sin C1L1L2P2</span></div>
       <span class="slink">›</span>
       <div class="snode" id="nOut"><span class="t">salida 1</span><span class="v">—</span></div>
       <span class="slink">›</span>
@@ -1178,6 +1178,7 @@ async function connectFolder() {
     state.canWrite = perm === 'granted';
     toast('Carpeta conectada: ' + state.dirName + (state.canWrite ? '' : ' (solo lectura)'), state.canWrite ? undefined : 'warn');
     if (!state.canWrite) toast('Concede «Editar archivos» para que las salidas se guarden en la carpeta', 'warn');
+    await copyExesToFolder();
     await scanFolder();
   } catch (e) {
     if (e.name === 'SecurityError') {
@@ -1246,8 +1247,8 @@ function updateRunBtn() {
   if (state.running) { b.disabled = true; b.innerHTML = ICO.spin + '<span>PROCESANDO…</span>'; }
   else {
     const n = state.files.filter(f => f.sel).length;
-    b.disabled = !n;
-    b.innerHTML = ICO.play + '<span>EJECUTAR PIPELINE</span>';
+    if (state.pending && state.pending.length) { b.disabled = false; b.innerHTML = ICO.play + '<span>PASO 2 · GENERAR TEQC (' + state.pending.length + ')</span>'; }
+    else { b.disabled = !n; b.innerHTML = ICO.play + '<span>PASO 1 · GENERAR GFZRNX _CHK</span>'; }
   }
   const bat = $('#btnBat');
   if (bat) bat.disabled = state.running;
@@ -1269,7 +1270,7 @@ function setNode(id, cls, v) {
   if (v != null) n.querySelector('.v').textContent = v;
 }
 function resetNodes() {
-  setNode('nSrc', null, '—'); setNode('nChk', null, '-chk -kv -f');
+  setNode('nSrc', null, '—'); setNode('nChk', null, '-chk -kv -f · sin C1L1L2P2');
   setNode('nOut', null, '—'); setNode('nTqc', null, $('#vTqc').textContent); setNode('nEnd', null, '—');
 }
 function parseObsReq(s) {
@@ -1343,30 +1344,28 @@ function renderResults() {
   }
 }
 
-/* =============== pipeline =============== */
+/* =============== pipeline en 2 pasos =============== */
+state.pending = [];  // archivos con _chk listo esperando teqc
 async function runPipeline() {
+  if (state.running) return;
+  if (state.pending.length) return runStep2();
   const sel = state.files.filter(f => f.sel);
-  if (!sel.length || state.running) return;
-  const obsReq = parseObsReq($('#pObs').value);
-  if (!obsReq.length) { toast('Indica al menos un tipo de observación (p. ej. C1L1L2P2)', 'err'); return; }
+  if (!sel.length) return;
   const sufChk = $('#pChk').value.trim() || '_chk';
   const sufTqc = $('#pTqc').value.trim() || 'teqc';
   state.running = true; updateRunBtn();
-  const canDisk = state.mode === 'fs' && state.dir && state.canWrite;
   let ok = 0, bad = 0;
   try {
     for (let n = 0; n < sel.length; n++) {
       const f = sel[n];
-      progress(n, sel.length);
-      resetNodes();
+      progress(n, sel.length); resetNodes();
       const names = buildNames(f.name, sufChk, sufTqc);
       const R = { src: f.name, size: f.size, outs: [], F: [], kv: [], error: null };
       setNode('nSrc', 'active', f.name);
       await nextFrame();
       try {
         const text = await readFileText(f);
-        setNode('nSrc', 'done');
-        setNode('nChk', 'active');
+        setNode('nSrc', 'done'); setNode('nChk', 'active');
         await con.cmd('gfzrnx -finp ' + f.name + ' -fout ' + names.chk + ' -chk -kv -f');
         const P = parseRinex(text, f.name);
         const { F, st } = runCheck(P);
@@ -1378,12 +1377,47 @@ async function runPipeline() {
         const s1 = await saveOutput(names.chk, built.text);
         R.outs.push({ op: 'gfzrnx -chk', name: names.chk, text: built.text, saved: s1.saved });
         setNode('nChk', 'done'); setNode('nOut', 'done', names.chk);
-        setNode('nTqc', 'active');
+        state.pending.push({ f, P, st, built, names, R });
+        ok++;
+      } catch (e) {
+        R.error = e.message || String(e);
+        con.line(esc('ERROR: ' + R.error)); con.blank(); bad++;
+      }
+      state.results.push(R);
+      renderResults(); renderFiles();
+    }
+    progress(sel.length, sel.length);
+    con.prompt();
+    toast('Paso 1 terminado: ' + ok + ' archivo(s) _chk generado(s)' + (bad ? ' · ' + bad + ' error(es)' : ''), bad ? 'warn' : undefined);
+  } finally {
+    state.running = false; updateRunBtn();
+  }
+  if (state.pending.length) {
+    await sleep(300);
+    const lst = state.pending.map(x => x.names.chk).join('\n');
+    if (confirm('Paso 1 listo. Se generó:\n' + lst + '\n\n¿Generar ahora el archivo teqc (paso 2) en la misma ruta?')) runStep2();
+    else toast('Cuando quieras, pulsa «PASO 2 · GENERAR TEQC»', 'warn');
+  }
+}
+async function runStep2() {
+  const obsReq = parseObsReq($('#pObs').value);
+  if (!obsReq.length) { toast('Indica al menos un tipo de observación (p. ej. C1L1L2P2)', 'err'); return; }
+  const jobs = state.pending.slice();
+  state.running = true; updateRunBtn();
+  const canDisk = state.mode === 'fs' && state.dir && state.canWrite;
+  let ok = 0, bad = 0;
+  try {
+    for (let n = 0; n < jobs.length; n++) {
+      const { f, P, st, built, names, R } = jobs[n];
+      progress(n, jobs.length); resetNodes();
+      setNode('nSrc', 'done', f.name); setNode('nChk', 'done'); setNode('nOut', 'done', names.chk);
+      setNode('nTqc', 'active');
+      await nextFrame();
+      try {
         await con.cmd('teqc -O.obs ' + obsReq.join('') + ' ' + names.chk + ' > ' + names.teqc);
         const T = buildTeqcText(P, st, built, obsReq);
         if (T.error) throw new Error(T.error);
         teqcConsole(P, names.chk);
-        const ts = T.v2 ? teqcStatsV2(P, built.perm, T.selPos) : teqcStats(P, T.selT);
         const s2 = await saveOutput(names.teqc, T.text);
         R.outs.push({ op: 'teqc -O.obs', name: names.teqc, text: T.text, saved: s2.saved });
         con.blank();
@@ -1391,18 +1425,16 @@ async function runPipeline() {
         f.done = true; ok++;
       } catch (e) {
         R.error = e.message || String(e);
-        con.line(esc('ERROR: ' + R.error)); con.blank();
-        bad++;
+        con.line(esc('ERROR: ' + R.error)); con.blank(); bad++;
       }
-      state.results.push(R);
       renderResults(); renderFiles();
     }
-    progress(sel.length, sel.length);
+    progress(jobs.length, jobs.length);
     con.prompt();
-    void ('pipeline terminado: ' + ok + ' correcto(s), ' + bad + ' con error', bad ? 'wn' : 'ok');
     if (!canDisk && ok) toast('Salidas listas para descargar en cada ficha', 'warn');
-    toast('Pipeline terminado: ' + ok + ' ok · ' + bad + ' error(es)', bad ? 'warn' : undefined);
+    toast('Paso 2 terminado: ' + ok + ' archivo(s) teqc' + (bad ? ' · ' + bad + ' error(es)' : ''), bad ? 'warn' : undefined);
   } finally {
+    state.pending = [];
     state.running = false; updateRunBtn();
   }
 }
@@ -1419,23 +1451,43 @@ function buildBat() {
     'title PIPELINE RINEX - gfzrnx + teqc',
     'if not exist gfzrnx.exe ( echo [ERROR] falta gfzrnx.exe en esta carpeta & pause & exit /b 1 )',
     'if not exist teqc.exe ( echo [ERROR] falta teqc.exe en esta carpeta & pause & exit /b 1 )',
-    'set /a N=0',
+    'echo PASO 1 - gfzrnx',
+    'if not exist *.??o ( echo [ERROR] no hay archivos RINEX *.??o en esta carpeta & pause & exit /b 1 )',
     'for %%F in (*.??o) do (',
-    '  echo %%~nxF | findstr /i /c:"' + sufTqc + '" >nul',
-    '  if errorlevel 1 (',
-    '    set /a N+=1',
-    '    echo ------------------------------------------------------------',
-    '    echo [!N!] %%~nxF',
-    '    gfzrnx -finp "%%~nxF" -fout "%%~nxF' + sufChk + '" -chk -kv -f',
-    '    teqc -O.obs ' + obs + ' "%%~nxF' + sufChk + '" > "%%~nF' + sufTqc + '%%~xF"',
-    '    echo     salidas: %%~nxF' + sufChk + '  y  %%~nF' + sufTqc + '%%~xF',
-    '  )',
+    '  echo %%~nxF | findstr /i /c:"' + sufTqc + '" /c:"' + sufChk + '" >nul',
+    '  if errorlevel 1 echo gfzrnx -finp %%~nxF -fout %%~nxF' + sufChk + ' -chk -kv -f',
+    '  if errorlevel 1 gfzrnx -finp "%%~nxF" -fout "%%~nxF' + sufChk + '" -chk -kv -f',
     ')',
     'echo ------------------------------------------------------------',
-    'echo Terminado: !N! archivo(s) procesado(s).',
+    'choice /c SN /m "Archivos _chk generados. Generar ahora los archivos teqc"',
+    'if errorlevel 2 ( echo Paso 2 cancelado. & pause & exit /b 0 )',
+    'echo PASO 2 - teqc',
+    'for %%F in (*.??o' + sufChk + ') do (',
+    '  set "E=%%~xF"',
+    '  set "E=!E:' + sufChk + '=!"',
+    '  echo teqc -O.obs ' + obs + ' %%~nxF ^> %%~nF' + sufTqc + '!E!',
+    '  teqc -O.obs ' + obs + ' "%%~nxF" > "%%~nF' + sufTqc + '!E!"',
+    ')',
+    'echo Terminado.',
     'pause',
     ''
   ].join('\r\n');
+}
+
+/* copia gfzrnx.exe / teqc.exe y el .bat a la carpeta de origen */
+async function writeToFolder(name, data) {
+  if (!(state.mode === 'fs' && state.dir && state.canWrite)) return false;
+  try {
+    const fh = await state.dir.getFileHandle(name, { create: true });
+    const w = await fh.createWritable(); await w.write(data); await w.close();
+    return true;
+  } catch (err) { toast('No se pudo escribir ' + name + ': ' + err.message, 'err'); return false; }
+}
+async function copyExesToFolder() {
+  const ex = state.exeFiles || {};
+  for (const k of Object.keys(ex)) {
+    if (ex[k] && await writeToFolder(k + '.exe', ex[k])) { toast(k + '.exe guardado en la carpeta'); ex[k] = null; }
+  }
 }
 
 /* =============== eventos =============== */
@@ -1470,18 +1522,18 @@ $('#inExe').addEventListener('change', async e => {
   const file = e.target.files[0]; e.target.value = '';
   if (!file || !exeTarget) return;
   state.exes[exeTarget] = file.size;
-  if (state.mode === 'fs' && state.dir && state.canWrite) {
-    try {
-      const fh = await state.dir.getFileHandle(exeTarget + '.exe', { create: true });
-      const w = await fh.createWritable(); await w.write(file); await w.close();
-      toast(exeTarget + '.exe copiado a la carpeta');
-    } catch (err) { toast('No se pudo copiar ' + exeTarget + '.exe: ' + err.message, 'err'); }
-  }
+  state.exeFiles = state.exeFiles || {};
+  state.exeFiles[exeTarget] = file;
+  await copyExesToFolder();
   renderExes();
 });
 
 $('#btnRun').addEventListener('click', runPipeline);
-$('#btnBat').addEventListener('click', () => downloadText('PIPELINE_RINEX.bat', buildBat()));
+$('#btnBat').addEventListener('click', async () => {
+  const bat = buildBat();
+  if (await writeToFolder('PIPELINE_RINEX.bat', bat)) toast('PIPELINE_RINEX.bat guardado en la carpeta · doble clic para ejecutar en cmd');
+  else downloadText('PIPELINE_RINEX.bat', bat);
+});
 $('#btnDlAll').addEventListener('click', async () => {
   for (const R of state.results) for (const o of R.outs) { downloadText(o.name, o.text); await sleep(250); }
 });

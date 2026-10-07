@@ -1,0 +1,1506 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Ajuste Geodésico · Pipeline RINEX — gfzrnx + teqc</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,200..900&family=IBM+Plex+Mono:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --bg:#090D0B; --panel:#0D1310; --line:#1F2A24; --line2:#2C3B33;
+  --ink:#DDE8E1; --dim:#8AA093; --faint:#5C7064;
+  --acc:#3ECF82; --amber:#E5A93D; --red:#E5604F;
+  --conbg:#0C0C0C; --conink:#CCCCCC; --concmd:#CCCCCC;
+  --mono:'IBM Plex Mono',ui-monospace,monospace; --disp:'Archivo',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  background:var(--bg);color:var(--ink);font:400 13px/1.5 var(--mono);
+  background-image:linear-gradient(rgba(255,255,255,.028) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px);
+  background-size:26px 26px;
+  display:flex;flex-direction:column;overflow:hidden;
+}
+:focus-visible{outline:1px solid var(--acc);outline-offset:2px}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#22302A;border:2px solid var(--bg)}
+::-webkit-scrollbar-track{background:transparent}
+
+header{flex:none;display:flex;justify-content:space-between;align-items:center;gap:16px;
+  padding:0 20px;height:62px;border-bottom:1px solid var(--line);background:var(--panel)}
+.brand{display:flex;gap:14px;align-items:center;min-width:0}
+.brand svg.mark{width:27px;height:27px;color:var(--acc);flex:none}
+.brand h1{font:700 17px/1 var(--disp);font-stretch:115%;letter-spacing:.09em;text-transform:uppercase;white-space:nowrap}
+.brand p{color:var(--dim);font-size:10.5px;letter-spacing:.05em;margin-top:4px;white-space:nowrap}
+.hstat{display:flex;gap:16px;align-items:center;font-size:11px;white-space:nowrap}
+.clock{color:var(--ink)} .clock b{color:var(--acc);font-weight:600}
+.clock.sub{color:var(--dim);font-size:10px}
+.badge{border:1px solid var(--line2);padding:5px 10px;font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
+.badge.on{color:var(--acc);border-color:rgba(62,207,130,.45)}
+.badge.off{color:var(--amber);border-color:rgba(229,169,61,.45)}
+
+main{flex:1;display:grid;grid-template-columns:382px 1fr;min-height:0}
+aside{border-right:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;overflow-y:auto;min-height:0}
+section.step{padding:16px 18px 18px;border-bottom:1px solid var(--line)}
+.step-h{display:flex;align-items:baseline;gap:10px;margin-bottom:12px}
+.step-h .n{font:250 26px/1 var(--disp);font-stretch:70%;color:var(--faint)}
+.step-h h2{font:600 11.5px/1 var(--disp);font-stretch:112%;letter-spacing:.14em;text-transform:uppercase}
+.step-h .hint{margin-left:auto;font-size:10px;color:var(--faint)}
+
+button{font:500 12px var(--mono);cursor:pointer;color:var(--ink);background:transparent;
+  border:1px solid var(--line2);padding:8px 12px;display:inline-flex;gap:8px;align-items:center;
+  transition:border-color .12s,background .12s,color .12s}
+button:hover:not(:disabled){border-color:var(--acc);color:var(--acc)}
+button:disabled{cursor:default;border-color:var(--line);color:var(--faint)}
+button svg{width:14px;height:14px;flex:none}
+button.mini{padding:5px 9px;font-size:10.5px}
+.btnrow{display:flex;gap:8px;margin-bottom:10px}
+.grow{flex:1;justify-content:center}
+.icbtn{border:none;padding:5px 7px;color:var(--dim)}
+.icbtn:hover{color:var(--acc);background:rgba(62,207,130,.07)}
+.run{padding:16px 18px;margin-top:auto;border-top:1px solid var(--line);background:var(--panel)}
+#btnRun{width:100%;justify-content:center;padding:13px;background:var(--acc);border-color:var(--acc);color:#04130B;
+  font:700 13px var(--disp);font-stretch:112%;letter-spacing:.12em;text-transform:uppercase}
+#btnRun:hover:not(:disabled){background:#54DE93;border-color:#54DE93;color:#04130B}
+#btnRun:disabled{background:transparent;border-color:var(--line2);color:var(--faint)}
+#btnDlAll{padding:6px 10px;font-size:10.5px}
+.spin{animation:rot 1s linear infinite}
+@keyframes rot{to{transform:rotate(360deg)}}
+
+.filelist{border:1px solid var(--line);max-height:236px;overflow-y:auto;background:var(--bg)}
+.frow{display:flex;gap:8px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--line);cursor:pointer}
+.frow:last-child{border-bottom:none}
+.frow:hover{background:rgba(62,207,130,.05)}
+.frow input{accent-color:var(--acc);flex:none}
+.fname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.fsize{color:var(--faint);font-size:10px;flex:none}
+.frow .st{font-size:11px;color:var(--acc);flex:none}
+.empty{padding:14px 10px;color:var(--faint);font-size:11px}
+
+.exe{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px dashed var(--line)}
+.exe:last-of-type{border-bottom:none}
+.exe>svg{width:16px;height:16px;color:var(--dim);flex:none}
+.exe .nm{flex:1;min-width:0}
+.exe .nm b{font-weight:600;font-size:12px;display:block}
+.exe .nm i{display:block;font-style:normal;font-size:10px;color:var(--dim)}
+.dot{width:7px;height:7px;border-radius:50%;flex:none}
+.dot.on{background:var(--acc)} .dot.off{background:var(--amber)}
+.note{font-size:10.5px;color:var(--faint);margin-top:10px;line-height:1.55}
+.note b{color:var(--dim);font-weight:500}
+
+.param{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.param:last-child{margin-bottom:0}
+.param label{width:130px;flex:none;font-size:11px;color:var(--dim);letter-spacing:.03em}
+.param input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line2);color:var(--ink);
+  font:500 12px var(--mono);padding:7px 9px}
+.param input:focus{outline:none;border-color:var(--acc)}
+
+.stage{display:flex;flex-direction:column;min-height:0;overflow-y:auto}
+.strip{flex:none;display:flex;align-items:stretch;border-bottom:1px solid var(--line);background:var(--panel);
+  padding:10px 16px;overflow-x:auto;gap:0}
+.snode{display:flex;flex-direction:column;justify-content:center;gap:3px;border:1px solid var(--line2);
+  padding:6px 12px;min-width:130px;flex:none}
+.snode .t{font:600 9.5px var(--disp);font-stretch:112%;letter-spacing:.13em;text-transform:uppercase;color:var(--faint)}
+.snode .v{font-size:11px;color:var(--dim);max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.snode.done{border-color:rgba(62,207,130,.5)} .snode.done .t{color:var(--acc)}
+.snode.active{border-color:var(--amber)} .snode.active .t{color:var(--amber)}
+.snode.active .v{color:var(--ink)}
+.slink{flex:none;display:flex;align-items:center;padding:0 9px;color:var(--faint);font-size:15px}
+.pbar{flex:none;height:2px;background:var(--line)}
+#pfill{height:100%;width:0;background:var(--acc);transition:width .35s}
+
+.conwrap{flex:none;display:flex;flex-direction:column;height:41vh;min-height:280px;border-bottom:1px solid var(--line)}
+.conhead{display:flex;align-items:center;gap:8px;padding:7px 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+.conhead>svg{width:15px;height:15px;color:var(--dim)}
+.conhead .t{font:600 10.5px var(--disp);letter-spacing:.15em;text-transform:uppercase;color:var(--dim)}
+.conhead .sp{flex:1}
+.console{flex:1;overflow-y:auto;background:var(--conbg);padding:6px 8px;font:400 13px/1.25 Consolas,'Lucida Console','Courier New',monospace;color:var(--conink)}
+.cl.cmd{font-weight:400!important}
+.cur{background:var(--conink)!important;height:3px!important;vertical-align:-3px!important}
+.cl{white-space:pre-wrap;word-break:break-all;animation:clin .16s ease-out}
+@keyframes clin{from{opacity:0}to{opacity:1}}
+.cl.cmd{color:var(--concmd);font-weight:600}
+.cl.sys{color:var(--dim)}
+.cl.ok{color:var(--acc)} .cl.wn{color:var(--amber)}
+.cl.er{color:var(--red);font-weight:600}
+.cl.b{color:var(--ink);font-weight:600;letter-spacing:.1em}
+.cl.kvr .k{display:inline-block;width:196px;color:var(--faint)}
+.cl.find{display:flex;gap:10px}
+.cl.find .tag{flex:none;width:56px;font-weight:600}
+.tag.ok{color:var(--acc)} .tag.wn{color:var(--amber)} .tag.er{color:var(--red)}
+.cur{display:inline-block;width:8px;height:15px;background:var(--acc);vertical-align:-2px;animation:blink 1.1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+
+.results{padding:16px 20px 30px}
+.reshead{display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.reshead h2{font:600 11.5px var(--disp);letter-spacing:.15em;text-transform:uppercase}
+.reshead .hint{font-size:10.5px;color:var(--dim)}
+.reshead .hint2{margin-left:auto;color:var(--faint);font-size:10px}
+.card{border:1px solid var(--line2);background:var(--panel);margin-bottom:14px;animation:cardin .25s ease-out}
+@keyframes cardin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.card .flow{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.fchip{display:flex;align-items:center;gap:6px;border:1px solid var(--line2);padding:5px 9px;font-size:11px;max-width:270px}
+.fchip svg{width:12px;height:12px;flex:none;color:var(--acc)}
+.fchip .nmm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fchip.err{border-color:rgba(229,96,79,.5)}
+.fchip.err svg{color:var(--red)}
+.fop{font-size:9.5px;color:var(--faint);letter-spacing:.08em;text-transform:uppercase}
+.farrow{color:var(--faint)}
+.ferr{color:var(--red);font-size:11px}
+.flow .fsize{margin-left:auto}
+.meta{display:grid;grid-template-columns:138px minmax(0,1fr) 138px minmax(0,1fr);border-bottom:1px solid var(--line)}
+.meta .mk{padding:6px 10px 6px 14px;border-bottom:1px solid var(--line);color:var(--dim);
+  font-size:10px;text-transform:uppercase;letter-spacing:.05em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.meta .mv{padding:6px 14px;border-bottom:1px solid var(--line);font-size:11.5px;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.meta :nth-last-child(-n+4){border-bottom:none}
+.card details{border-bottom:1px solid var(--line)}
+.card summary{list-style:none;cursor:pointer;padding:9px 14px;font-size:11px;color:var(--dim);display:flex;gap:10px;align-items:center}
+.card summary::-webkit-details-marker{display:none}
+.card summary::before{content:'+';color:var(--faint);width:12px}
+.card details[open] summary::before{content:'−'}
+.card summary:hover{color:var(--ink)}
+.findlist{padding:2px 14px 10px 36px}
+.findlist li{list-style:none;font-size:11px;color:var(--dim);padding:2px 0;display:flex;gap:8px}
+.findlist .lv{width:46px;flex:none;font-weight:600}
+.lv.ok{color:var(--acc)} .lv.wn{color:var(--amber)} .lv.er{color:var(--red)}
+.card .actions{display:flex;gap:10px;padding:10px 14px;flex-wrap:wrap}
+
+footer{flex:none;border-top:1px solid var(--line);background:var(--panel);padding:8px 20px;font-size:10px;
+  color:var(--faint);display:flex;justify-content:space-between;gap:16px;letter-spacing:.04em;flex-wrap:wrap}
+#toasts{position:fixed;right:18px;bottom:18px;display:flex;flex-direction:column;gap:8px;z-index:50}
+.toast{background:var(--panel);border:1px solid var(--line2);border-left:3px solid var(--acc);
+  padding:10px 14px;font-size:12px;min-width:240px;max-width:340px;animation:cardin .2s ease-out}
+.toast.warn{border-left-color:var(--amber)} .toast.err{border-left-color:var(--red)}
+
+@media (max-width:960px){
+  body{overflow:auto}
+  main{grid-template-columns:1fr}
+  aside{border-right:none;border-bottom:1px solid var(--line)}
+  .run{position:static}
+  .cl.kvr .k{width:128px}
+  .meta{grid-template-columns:120px minmax(0,1fr)}
+}
+</style>
+<style>
+#lg{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 30% 20%,rgba(62,207,130,.12),transparent 50%),radial-gradient(circle at 80% 90%,rgba(229,169,61,.08),transparent 50%),#070A09;overflow:hidden}
+#lg canvas{position:absolute;inset:0}
+#lg .card{position:relative;width:min(380px,92vw);padding:34px 30px;border:1px solid var(--line2);background:rgba(13,19,16,.78);backdrop-filter:blur(14px);box-shadow:0 0 0 1px rgba(62,207,130,.08),0 30px 80px rgba(0,0,0,.6)}
+#lg .card:before,#lg .card:after{content:"";position:absolute;width:14px;height:14px;border:2px solid var(--acc)}
+#lg .card:before{top:-1px;left:-1px;border-right:0;border-bottom:0}#lg .card:after{bottom:-1px;right:-1px;border-left:0;border-top:0}
+#lg h1{font:800 26px/1 var(--disp);font-stretch:120%;letter-spacing:.02em}
+#lg .sub{color:var(--dim);font-size:11px;letter-spacing:.18em;text-transform:uppercase;margin:8px 0 26px}
+#lg label{display:block;font-size:10px;letter-spacing:.2em;color:var(--faint);text-transform:uppercase;margin:14px 0 6px}
+#lg input{width:100%;padding:12px 14px;background:#070A09;border:1px solid var(--line2);color:var(--ink);font:500 14px var(--mono);transition:.2s}
+#lg input:focus{outline:0;border-color:var(--acc);box-shadow:0 0 0 3px rgba(62,207,130,.15)}
+#lg button{margin-top:24px;width:100%;padding:13px;border:0;background:var(--acc);color:#04130B;font:700 13px var(--mono);letter-spacing:.2em;text-transform:uppercase;cursor:pointer;transition:.2s}
+#lg button:hover{filter:brightness(1.1);box-shadow:0 0 24px rgba(62,207,130,.4)}
+#lg button:disabled{opacity:.5;cursor:wait}
+#lg .msg{min-height:18px;margin-top:14px;font-size:12px;color:var(--red)}
+#lg .ok{color:var(--acc)}
+#lg .st{display:flex;gap:8px;align-items:center;font-size:10px;color:var(--faint);margin-top:18px;letter-spacing:.12em}
+#lg .dot{width:7px;height:7px;border-radius:50%;background:var(--acc);box-shadow:0 0 8px var(--acc);animation:lgp 1.6s infinite}
+@keyframes lgp{50%{opacity:.3}}
+#lgout{position:fixed;right:12px;bottom:12px;z-index:9998;padding:6px 12px;background:var(--panel);border:1px solid var(--line2);color:var(--dim);font:500 11px var(--mono);cursor:pointer}
+</style>
+</head>
+<body>
+<div id="lg"><canvas id="lgc"></canvas>
+<form class="card" id="lgf" autocomplete="on">
+<h1>ACCESO SEGURO</h1><div class="sub">Ajuste Geodésico · RINEX</div>
+<label for="lgu">Usuario</label><input id="lgu" required autocomplete="username"/>
+<label for="lgp">Contraseña</label><input id="lgp" type="password" required autocomplete="current-password"/>
+<button id="lgb" type="submit">Ingresar</button>
+<div class="msg" id="lgm"></div>
+<div class="st"><span class="dot"></span>CONEXIÓN CIFRADA · GOOGLE SHEETS</div>
+</form></div>
+<button id="lgout" style="display:none">Cerrar sesión</button>
+<script>
+(function(){
+/* PEGA AQUÍ LA URL DE TU APPS SCRIPT (Implementar > Aplicación web) */
+const API_URL="https://script.google.com/macros/s/AKfycbxDp4GUNtSu1VoY0Qo1P21BbLfc4jHHMAaXB64a66XKd3qJmJdYUAyPXeCLHcFgc3P60A/exec";
+const lg=document.getElementById('lg'),f=document.getElementById('lgf'),m=document.getElementById('lgm'),b=document.getElementById('lgb'),out=document.getElementById('lgout');
+const c=document.getElementById('lgc'),x=c.getContext('2d');let P=[];
+function rs(){c.width=innerWidth;c.height=innerHeight;P=Array.from({length:70},()=>({x:Math.random()*c.width,y:Math.random()*c.height,vx:(Math.random()-.5)*.4,vy:(Math.random()-.5)*.4}))}
+function dr(){if(lg.style.display==='none')return;x.clearRect(0,0,c.width,c.height);for(const p of P){p.x+=p.vx;p.y+=p.vy;if(p.x<0||p.x>c.width)p.vx*=-1;if(p.y<0||p.y>c.height)p.vy*=-1;x.fillStyle='rgba(62,207,130,.7)';x.fillRect(p.x,p.y,2,2)}
+for(let i=0;i<P.length;i++)for(let j=i+1;j<P.length;j++){const d=Math.hypot(P[i].x-P[j].x,P[i].y-P[j].y);if(d<130){x.strokeStyle='rgba(62,207,130,'+(1-d/130)*.25+')';x.beginPath();x.moveTo(P[i].x,P[i].y);x.lineTo(P[j].x,P[j].y);x.stroke()}}requestAnimationFrame(dr)}
+addEventListener('resize',rs);rs();dr();
+function enter(s){lg.style.display='none';out.style.display='block';out.textContent='⏻ '+s.nombre+' · Cerrar sesión'}
+const s=JSON.parse(sessionStorage.getItem('rg_ses')||'null');
+if(s&&s.exp>Date.now())enter(s);
+out.onclick=()=>{sessionStorage.removeItem('rg_ses');location.reload()};
+f.onsubmit=async e=>{e.preventDefault();m.className='msg';m.textContent='';b.disabled=true;b.textContent='Verificando…';
+try{const r=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'login',usuario:document.getElementById('lgu').value.trim(),password:document.getElementById('lgp').value})});
+const d=await r.json();if(d.ok){m.className='msg ok';m.textContent='Acceso concedido';const ses={nombre:d.nombre,rol:d.rol,exp:Date.now()+8*3600e3};sessionStorage.setItem('rg_ses',JSON.stringify(ses));setTimeout(()=>enter(ses),500)}else m.textContent=d.error||'Credenciales inválidas'}
+catch(err){m.textContent='No se pudo conectar con Google Sheets'}b.disabled=false;b.textContent='Ingresar'};
+})();
+</script>
+
+<header>
+  <div class="brand">
+    <svg class="mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <circle cx="12" cy="10" r="6.5"/>
+      <path d="M12 2v3M12 15v3M4.5 10H7M17 10h2.5M8 21h8M9.5 21l1-3h3l1 3"/>
+    </svg>
+    <div>
+      <h1>Ajuste geodésico</h1>
+      <p>línea de proceso rinex · gfzrnx −chk · teqc −O.obs</p>
+    </div>
+  </div>
+  <div class="hstat">
+    <div class="clock" id="clockUtc">UTC --:--:--</div>
+    <div class="clock sub" id="clockGps">GPS —</div>
+    <span class="badge" id="fsBadge">comprobando navegador…</span>
+  </div>
+</header>
+
+<main>
+  <aside>
+    <!-- 01 carpeta -->
+    <section class="step">
+      <div class="step-h"><span class="n">01</span><h2>Carpeta de trabajo</h2><span class="hint" id="fileCount">—</span></div>
+      <div class="btnrow" id="fsBtns">
+        <button id="btnConnect" class="grow">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6h6l2 2h10v11H3z"/></svg>
+          <span>conectar carpeta…</span>
+        </button>
+        <button id="btnScan" title="re-escanear carpeta">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 3v4h-4"/></svg>
+        </button>
+      </div>
+      <div class="btnrow" id="memBtns" style="display:none">
+        <button id="btnPickDir" class="grow">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6h6l2 2h10v11H3z"/></svg>
+          <span>elegir carpeta…</span>
+        </button>
+        <button id="btnPickFiles">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 3h8l4 4v14H6zM14 3v4h4"/></svg>
+          <span>archivos</span>
+        </button>
+      </div>
+      <!-- botón generador del .bat (procedimiento manual automatizado) -->
+      <div class="btnrow" style="margin-top:2px">
+        <button id="btnBat" class="grow" title="Genera PIPELINE_RINEX.bat: colócalo en la carpeta de trabajo (junto a los *.??o y los .exe) y haz doble clic — equivale a abrir cmd desde la barra de ruta y ejecutar gfzrnx -chk y teqc -O.obs por cada archivo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 5l6 5-6 5M12 15h8"/></svg>
+          <span>generar PIPELINE_RINEX.bat</span>
+        </button>
+      </div>
+      <div class="filelist" id="fileList"><div class="empty">sin carpeta conectada</div></div>
+    </section>
+
+    <!-- 02 programas -->
+    <section class="step">
+      <div class="step-h"><span class="n">02</span><h2>Programas gfzrnx · teqc</h2></div>
+      <div class="exe" id="exe-gfzrnx">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="7" y="7" width="10" height="10"/><path d="M10 7V4M14 7V4M10 20v-3M14 20v-3M7 10H4M7 14H4M20 10h-3M20 14h-3"/></svg>
+        <div class="nm"><b>gfzrnx.exe</b><i class="stt">—</i></div>
+        <span class="dot off"></span>
+        <button class="mini" id="ldGfzrnx">cargar…</button>
+      </div>
+      <div class="exe" id="exe-teqc">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="7" y="7" width="10" height="10"/><path d="M10 7V4M14 7V4M10 20v-3M14 20v-3M7 10H4M7 14H4M20 10h-3M20 14h-3"/></svg>
+        <div class="nm"><b>teqc.exe</b><i class="stt">—</i></div>
+        <span class="dot off"></span>
+        <button class="mini" id="ldTeqc">cargar…</button>
+      </div>
+      <p class="note">La app replica localmente el formato exacto de <b>gfzrnx -chk</b> (tipos reordenados, # OF SATELLITES, PRN / # OF OBS, TIME OF LAST OBS) y de <b>teqc -O.obs</b> leyendo el *_chk, igual que tu flujo CMD real.</p>
+    </section>
+
+    <!-- 03 parámetros -->
+    <section class="step">
+      <div class="step-h"><span class="n">03</span><h2>Parámetros</h2></div>
+      <div class="param"><label for="pRuta">ruta en cmd</label><input id="pRuta" value="" placeholder="E:\...\rinex\base\PTSI" spellcheck="false"/></div>
+      <div class="param"><label for="pObs">tipos a conservar</label><input id="pObs" value="C1L1L2P2" spellcheck="false"/></div>
+      <div class="param"><label for="pChk">sufijo chk</label><input id="pChk" value="_chk" spellcheck="false"/></div>
+      <div class="param"><label for="pTqc">sufijo teqc</label><input id="pTqc" value="teqc" spellcheck="false"/></div>
+    </section>
+
+    <div class="run"><button id="btnRun" disabled></button></div>
+  </aside>
+
+  <section class="stage">
+    <div class="strip">
+      <div class="snode" id="nSrc"><span class="t">entrada</span><span class="v">—</span></div>
+      <span class="slink">›</span>
+      <div class="snode" id="nChk"><span class="t">gfzrnx −chk</span><span class="v">-chk -kv -f</span></div>
+      <span class="slink">›</span>
+      <div class="snode" id="nOut"><span class="t">salida 1</span><span class="v">—</span></div>
+      <span class="slink">›</span>
+      <div class="snode" id="nTqc"><span class="t">teqc −O.obs</span><span class="v" id="vTqc">C1L1L2P2</span></div>
+      <span class="slink">›</span>
+      <div class="snode" id="nEnd"><span class="t">salida 2</span><span class="v">—</span></div>
+    </div>
+    <div class="pbar"><div id="pfill"></div></div>
+
+    <div class="conwrap">
+      <div class="conhead">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 5l6 5-6 5M12 15h8"/></svg>
+        <span class="t" style="text-transform:none;letter-spacing:0">C:\Windows\System32\cmd.exe</span>
+        <span class="sp"></span>
+        <button class="icbtn" id="btnCopy" title="copiar consola">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="8" y="8" width="12" height="12"/><path d="M16 4H4v12"/></svg>
+        </button>
+        <button class="icbtn" id="btnClear" title="limpiar consola">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13"/></svg>
+        </button>
+      </div>
+      <div class="console" id="console"><div id="conBody"></div><span class="cur"></span></div>
+    </div>
+
+    <div class="results">
+      <div class="reshead">
+        <h2>Resultados</h2>
+        <span class="hint" id="resCount">0 archivo(s)</span>
+        <button id="btnDlAll" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v11m0 0l-4.5-4.5M12 14l4.5-4.5M4 20h16"/></svg>
+          <span>descargar todas las salidas</span>
+        </button>
+        <span class="hint2">fichas más recientes arriba · despliega «hallazgos» para el detalle del check</span>
+      </div>
+      <div id="results"><div class="empty">aún no hay procesamientos — ejecuta el pipeline</div></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span>gfzrnx © GFZ Potsdam · teqc © EarthScope–UNAVCO — operaciones reproducidas localmente</span>
+  <span>procesamiento 100 % local: ningún dato sale de tu equipo</span>
+</footer>
+
+<input type="file" id="inExe" accept=".exe" hidden/>
+<input type="file" id="inDir" webkitdirectory multiple hidden/>
+<input type="file" id="inFiles" multiple hidden/>
+<div id="toasts"></div>
+
+<script>
+(() => {
+'use strict';
+
+/* =============== utilidades =============== */
+const $ = s => document.querySelector(s);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const nextFrame = () => new Promise(r => requestAnimationFrame(r));
+const pad2 = n => String(n).padStart(2, '0');
+const pad3 = n => String(n).padStart(3, ' ');
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmtKB = n => n >= 1048576 ? (n/1048576).toFixed(1)+' MB' : (n/1024).toFixed(1)+' kB';
+const fmtN = n => n.toLocaleString('es');
+
+function toast(msg, kind) {
+  const t = document.createElement('div');
+  t.className = 'toast' + (kind ? ' ' + kind : '');
+  t.textContent = msg;
+  $('#toasts').appendChild(t);
+  setTimeout(() => { t.style.transition = 'opacity .3s'; t.style.opacity = '0'; setTimeout(() => t.remove(), 350); }, 4000);
+}
+
+const ICO = {
+  play : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4.5v15l13-7.5z"/></svg>',
+  check: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 12.5l5 5L20 6.5"/></svg>',
+  cross: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  down : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v11m0 0l-4.5-4.5M12 14l4.5-4.5M4 20h16"/></svg>',
+  spin : '<svg class="spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3a9 9 0 1 0 9 9"/></svg>'
+};
+
+/* =============== estado =============== */
+const state = {
+  fs : 'showDirectoryPicker' in window,
+  dir: null, dirName: '', mode: 'idle',           // 'fs' | 'mem'
+  canWrite: true,                                  // permiso real de escritura
+  files: [], results: [], running: false,
+  exes: { gfzrnx: null, teqc: null }
+};
+const promptStr = () => { const el = document.getElementById('pRuta'); const r = el && el.value.trim().replace(/[\\>]+$/, ''); return (r || ('C:\\' + (state.dirName || 'GEODESIA'))) + '>'; };
+
+/* =============== reloj UTC / GPS =============== */
+const GPS_T0 = Date.UTC(1980, 0, 6), LEAP = 18;
+function tick() {
+  const now = new Date();
+  const p2 = n => String(n).padStart(2,'0');
+  $('#clockUtc').innerHTML = 'UTC <b>' + p2(now.getHours()) + ':' + p2(now.getMinutes()) + ':' + p2(now.getSeconds()) + '</b>';
+  const g = now.getTime() + LEAP*1000 - GPS_T0;
+  const wk = Math.floor(g / 604800000);
+  const tow = ((g % 604800000) / 1000).toFixed(2);
+  $('#clockGps').textContent = 'sem. GPS ' + wk + ' · ' + tow + ' s';
+}
+setInterval(tick, 1000); tick();
+
+/* =============== consola =============== */
+const con = {
+  el: $('#conBody'), sc: $('#console'), stick: true,
+  scroll() { if (this.stick) this.sc.scrollTop = this.sc.scrollHeight; },
+  line(html, cls) {
+    const d = document.createElement('div');
+    d.className = 'cl' + (cls ? ' ' + cls : '');
+    d.innerHTML = html;
+    this.el.appendChild(d); this.scroll();
+    return d;
+  },
+  async cmd(text) {
+    const last = this.el.lastElementChild;
+    if (last && last.classList.contains('pr')) last.remove();
+    const d = document.createElement('div');
+    d.className = 'cl cmd';
+    d.innerHTML = '<span class="c-prompt">' + esc(promptStr()) + '</span><span class="tx"></span>';
+    this.el.appendChild(d);
+    const tx = d.querySelector('.tx');
+    tx.textContent = text; this.scroll(); await nextFrame();
+  },
+  kv(rows) { for (const r of rows) this.line('<span class="k">' + esc(r[0]) + '</span>' + esc(r[1] === '' || r[1] == null ? '—' : r[1]), 'kvr'); },
+  findings(list) {
+    for (const f of list) {
+      const tag = f.lv === 'ok' ? ' OK  ' : (f.lv === 'wn' ? 'AVISO' : 'ERROR');
+      this.line('<span class="tag ' + f.lv + '">[' + tag + ']</span><span>' + esc(f.msg) + '</span>', 'find');
+    }
+  },
+  sep() { this.line('─'.repeat(72), 'sys'); },
+  blank() { this.line('&nbsp;'); },
+  banner() {
+    this.line('Microsoft Windows [Versión 10.0.19045.6466]');
+    this.line('(c) Microsoft Corporation. Todos los derechos reservados.');
+    this.blank();
+  },
+  prompt() { this.line(esc(promptStr()), 'pr'); },
+  clear() { this.el.innerHTML = ''; this.prompt(); }
+};
+con.sc.addEventListener('scroll', () => {
+  con.stick = con.sc.scrollTop + con.sc.clientHeight >= con.sc.scrollHeight - 34;
+});
+
+/* =============== parser RINEX (v2 / v3) =============== */
+const SYS_L = 'GRCESJI';
+const EP_RE = /^\s*(\d{1,4})[ ]+(\d{1,2})[ ]+(\d{1,2})[ ]+(\d{1,2})[ ]+(\d{1,2})[ ]+(\d{1,2}\.\d+)[ ]+(\d{1,3})[ ]+(\d{1,3})\s*(.*)$/;
+
+function normSat(s3) {
+  const s = (s3 || '').trim();
+  if (!s) return '';
+  if (SYS_L.includes(s[0])) return s[0] + s.slice(1).padStart(2, '0');
+  return 'G' + s.padStart(2, '0');
+}
+function detectWidth(body, n) {
+  let best = 16, bestScore = -1;
+  for (const w of [16, 14]) {
+    let sc = 0;
+    for (let k = 0; k < n; k++) {
+      const v = body.substr(k * w, Math.min(14, w)).trim();
+      if (v !== '' && isFinite(Number(v))) sc++;
+    }
+    if (sc > bestScore) { bestScore = sc; best = w; }
+  }
+  return best;
+}
+function feedObs(r, body, w) {
+  let k = r.ptr;
+  for (; k < r.n; k++) {
+    const off = (k - r.ptr) * w;
+    if (off >= body.length) break;
+    const chunk = body.substr(off, w);
+    if (chunk.trim() === '') { r.obs[k] = null; continue; }
+    const vraw = chunk.slice(0, Math.min(14, w)).trim();
+    const lli = w >= 16 ? (chunk.substr(14,1) || '').trim() : '';
+    const ssi = w >= 16 ? (chunk.substr(15,1) || '').trim() : '';
+    if (vraw === '') { r.obs[k] = null; continue; }
+    const num = Number(vraw);
+    r.obs[k] = { num: isFinite(num) ? num : NaN, raw: vraw, lli, ssi };
+  }
+  r.ptr = k;
+}
+
+function parseRinex(text, fname) {
+  const P = {
+    fname, fatal: [], warnings: [], order: [], events: [],
+    version: null, verMajor: 2, fileType: '?', sysGlobal: '?',
+    headerRaw: [], headerEnd: -1, declaredV2: null, declaredV3: {},
+    obsTypes: {}, typesV2: [], obsWidth: 16, maxLineLen: 0,
+    meta: { marker:'', markerNumber:'', recNum:'', recType:'', recVers:'', antNum:'', antType:'',
+            approxPos:'', deltaHEN:'', interval:null, comments:0 }
+  };
+  const lines = text.replace(/^\uFEFF/, '').split(/\r\n|\n|\r/);
+  while (lines.length && lines[lines.length - 1] === '') lines.pop();
+  if (!lines.length) { P.fatal.push('el archivo está vacío'); return P; }
+
+  let curSys = null, tmpV2 = [], i = 0;
+  for (; i < lines.length; i++) {
+    const L = lines[i];
+    P.maxLineLen = Math.max(P.maxLineLen, L.length);
+    const label = L.length > 60 ? L.slice(60).trim() : '';
+    const data  = L.slice(0, 60);
+    P.headerRaw.push(L);
+    if (label === 'END OF HEADER') { P.headerEnd = i; i++; break; }
+    if (label === 'RINEX VERSION / TYPE') {
+      P.version  = parseFloat(data.slice(0, 20));
+      P.verMajor = (P.version || 0) >= 3 ? 3 : 2;
+      P.fileType = (data.slice(20, 21) || ' ').trim() || '?';
+      P.sysGlobal= (data.slice(40, 41) || ' ').trim() || (data.slice(41, 42) || ' ').trim() || 'M';
+    } else if (/TYPES\s*OF\s*OBS|OBS\s*TYPES/i.test(label)) {
+      if (P.verMajor === 2) {
+        const n = parseInt(data.slice(0, 6), 10);
+        const toks = data.slice(6).trim().split(/\s+/).filter(Boolean);
+        if (!isNaN(n)) { P.declaredV2 = n; tmpV2 = toks.slice(); }
+        else tmpV2 = tmpV2.concat(toks);
+      } else {
+        const toks = data.trim().split(/\s+/).filter(Boolean);
+        if (toks.length >= 2 && SYS_L.includes(toks[0]) && /^\d+$/.test(toks[1])) {
+          curSys = toks[0];
+          P.declaredV3[curSys] = +toks[1];
+          P.obsTypes[curSys] = toks.slice(2).filter(t => /^[A-Z]{1,2}\d[A-Z]?$/.test(t));
+        } else if (curSys && toks.length) {
+          P.obsTypes[curSys] = (P.obsTypes[curSys] || []).concat(toks.filter(t => /^[A-Z]{1,2}\d[A-Z]?$/.test(t)));
+        }
+      }
+    } else {
+      switch (label) {
+        case 'MARKER NAME':          P.meta.marker      = data.slice(0,60).trim(); break;
+        case 'MARKER NUMBER':        P.meta.markerNumber= data.slice(0,60).trim(); break;
+        case 'REC # / TYPE / VERS':
+          P.meta.recNum   = data.slice(0,20).trim();
+          P.meta.recType  = data.slice(20,40).trim();
+          P.meta.recVers  = data.slice(40,60).trim(); break;
+        case 'ANT # / TYPE':
+          P.meta.antNum   = data.slice(0,20).trim();
+          P.meta.antType  = data.slice(20,40).trim(); break;
+        case 'APPROX POSITION XYZ':  P.meta.approxPos   = data.slice(0,60).trim(); break;
+        case 'ANTENNA: DELTA H/E/N': P.meta.deltaHEN    = data.slice(0,60).trim(); break;
+        case 'INTERVAL':             P.meta.interval    = parseFloat(data.slice(0,10)); break;
+        case 'COMMENT':              P.meta.comments++; break;
+      }
+    }
+  }
+  P.typesV2 = tmpV2;
+  P.crux = [];
+  if (P.headerEnd < 0) P.fatal.push('no se encontró END OF HEADER');
+  if (P.version == null || isNaN(P.version)) P.fatal.push('RINEX VERSION / TYPE no legible');
+
+  let cur = null, rec = null, widthDet = false;
+  for (; i < lines.length; i++) {
+    const L = lines[i];
+    if (L.trim() === '') continue;
+    P.maxLineLen = Math.max(P.maxLineLen, L.length);
+    const m = (L[0] === '>' ? L.slice(1) : L).match(EP_RE);
+    if (m) {
+      let y = +m[1];
+      if (y < 100) y += y < 80 ? 2000 : 1900;
+      const sec = +m[6];
+      cur = {
+        i, y, mo:+m[2], d:+m[3], h:+m[4], mi:+m[5], sec,
+        t: Date.UTC(y, m[2]-1, m[3], m[4], m[5], Math.floor(sec), Math.round((sec % 1) * 1000)),
+        flag:+m[7], nsat:+m[8],
+        sats: (m[9] || '').match(/[GRCESJI]?\d{2}/g) || [],
+        recs: [], eventLines: []
+      };
+      rec = null;
+      P.order.push(cur);
+      if (cur.flag >= 2 && cur.flag <= 5) P.events.push(cur);
+      continue;
+    }
+    if (/^ {32}[GRCESJI]?\d{2}/.test(L) && cur && cur.sats.length < cur.nsat) {
+      cur.sats.push(...(L.slice(32).match(/[GRCESJI]?\d{2}/g) || []));
+      continue;
+    }
+    if (cur && cur.flag >= 2 && cur.flag <= 5) { cur.eventLines.push(L); continue; }
+    const sat3 = L.slice(0, 3);
+    const nT = P.verMajor === 3 ? (P.obsTypes[normSat(sat3)[0]] || []).length : P.typesV2.length;
+    if (sat3.trim() !== '') {
+      if (!widthDet && P.verMajor === 2 && nT > 0 && L.length > 20) {
+        P.obsWidth = detectWidth(L.slice(3), nT); widthDet = true;
+      }
+      const r = { sat: normSat(sat3), n: nT, obs: new Array(nT).fill(null), ptr: 0 };
+      feedObs(r, L.slice(3), P.obsWidth);
+      rec = r;
+      if (cur) cur.recs.push(r);
+      else P.warnings.push('línea ' + (i+1) + ': observación sin época previa');
+    } else if (rec) {
+      feedObs(rec, L.slice(3), P.obsWidth);
+    } else {
+      P.warnings.push('línea ' + (i+1) + ': línea no reconocida');
+    }
+  }
+  return P;
+}
+
+/* =============== verificación (modo -chk) =============== */
+function runCheck(P) {
+  const F = [];
+  const push = (lv, msg) => F.push({ lv, msg });
+  const eps = P.order.filter(e => !(e.flag >= 2 && e.flag <= 5));
+  const st = { epochs: eps.length, sats: new Set(), totalObs: 0, badVals: 0,
+               mismatch: 0, empty: 0, moves: 0, dups: 0, first: null, last: null, interval: null };
+
+  if (P.version != null && !isNaN(P.version)) {
+    if (P.version >= 2 && P.version < 4.5) push('ok', 'versión RINEX ' + P.version.toFixed(2) + ' — soportada');
+    else push('er', 'versión RINEX ' + P.version + ' no soportada');
+  }
+  push(P.fileType === 'O' ? 'ok' : 'er',
+       P.fileType === 'O' ? 'tipo de archivo: datos de observación (O)'
+                          : "tipo de archivo '" + P.fileType + "' — no es un archivo de observaciones");
+  if (P.headerEnd >= 0) push('ok', 'END OF HEADER en la línea ' + (P.headerEnd + 1) + ' · ' + (P.headerEnd + 1) + ' líneas de cabecera');
+
+  if (P.verMajor === 2) {
+    if (P.declaredV2 != null && P.declaredV2 !== P.typesV2.length)
+      push('wn', '# / TYPES OF OBSERV: ' + P.declaredV2 + ' declarados, ' + P.typesV2.length + ' listados');
+    push(P.typesV2.length ? 'ok' : 'er', 'tipos de observación (' + P.typesV2.length + '): ' + P.typesV2.join(' '));
+  } else {
+    for (const s of Object.keys(P.obsTypes)) {
+      const dec = P.declaredV3[s];
+      if (dec != null && dec !== P.obsTypes[s].length)
+        push('wn', 'SYS ' + s + ' / # / OBS TYPES: ' + dec + ' declarados, ' + P.obsTypes[s].length + ' listados');
+      push(P.obsTypes[s].length ? 'ok' : 'wn', 'sistema ' + s + ': ' + P.obsTypes[s].length + ' tipos — ' + P.obsTypes[s].join(' '));
+    }
+  }
+
+  let prevT = null;
+  for (const e of eps) {
+    if (prevT !== null) {
+      if (e.t < prevT) st.moves++;
+      else if (e.t === prevT) st.dups++;
+    }
+    prevT = e.t;
+    if (e.flag === 0 && e.nsat !== e.recs.length) st.mismatch++;
+    if (e.flag === 0 && e.recs.length === 0) st.empty++;
+    for (const r of e.recs) {
+      st.sats.add(r.sat);
+      for (const o of r.obs) if (o) { st.totalObs++; if (isNaN(o.num)) st.badVals++; }
+    }
+  }
+  st.first = eps[0] || null; st.last = eps[eps.length - 1] || null;
+
+  const ivc = new Map();
+  for (let k = 1; k < eps.length; k++) {
+    const d = Math.round((eps[k].t - eps[k-1].t) / 100) / 10;
+    ivc.set(d, (ivc.get(d) || 0) + 1);
+  }
+  let mode = null, best = 0;
+  for (const [v, c] of ivc) if (c > best) { best = c; mode = v; }
+  st.interval = mode;
+
+  if (st.epochs) {
+    push('ok', 'épocas: ' + fmtN(st.epochs) + ' · satélites: ' + st.sats.size + ' · observaciones: ' + fmtN(st.totalObs));
+    push(st.moves ? 'wn' : 'ok', st.moves ? st.moves + ' época(s) fuera de orden cronológico' : 'épocas en orden cronológico');
+    if (st.dups)     push('wn', st.dups + ' época(s) duplicada(s)');
+    if (st.mismatch) push('wn', st.mismatch + ' época(s) con nº de satélites declarado ≠ registros hallados (se corrige al reescribir)');
+    if (st.empty)    push('wn', st.empty + ' época(s) sin observaciones');
+    if (st.badVals)  push('wn', st.badVals + ' valor(es) de observación no numérico(s)');
+    if (P.meta.interval && mode && Math.abs(mode - P.meta.interval) > 1e-6)
+      push('wn', 'INTERVAL de cabecera (' + P.meta.interval + ' s) ≠ intervalo dominante (' + mode + ' s)');
+    else if (mode) push('ok', 'intervalo dominante: ' + mode + ' s');
+  } else push('er', 'el archivo no contiene épocas de observación');
+
+  if (P.events.length) push('wn', P.events.length + ' registro(s) de evento (flag 2-5)');
+  for (const w of P.warnings.slice(0, 8)) push('wn', w);
+  if (P.verMajor === 2 && P.maxLineLen > 80)
+    push('wn', 'líneas de hasta ' + P.maxLineLen + ' caracteres (RINEX 2 limita a 80)');
+
+  const miss = [];
+  if (!P.meta.marker)    miss.push('MARKER NAME');
+  if (!P.meta.recType)   miss.push('REC # / TYPE / VERS');
+  if (!P.meta.antType)   miss.push('ANT # / TYPE');
+  if (!P.meta.approxPos) miss.push('APPROX POSITION XYZ');
+  if (miss.length) push('wn', 'campos de cabecera ausentes: ' + miss.join(', '));
+  else push('ok', 'cabecera de estación completa (marker · receptor · antena · posición)');
+
+  return { F, st };
+}
+const epochStr = e => e ? (e.y + '-' + pad2(e.mo) + '-' + pad2(e.d) + ' ' + pad2(e.h) + ':' + pad2(e.mi) + ':' + pad2(Math.floor(e.sec)) + ' UTC') : '—';
+
+function kvRows(P, st, fname) {
+  const m = P.meta;
+  const typesDesc = P.verMajor === 2 ? P.typesV2.join(' ')
+    : Object.entries(P.obsTypes).map(([s, t]) => s + ':' + t.length).join(' ');
+  return [
+    ['archivo de entrada',   fname],
+    ['versión / tipo',       (P.version != null ? P.version.toFixed(2) : '?') + ' · OBSERVATION DATA'],
+    ['estación (marker)',    m.marker],
+    ['nº de marker',         m.markerNumber],
+    ['receptor',             [m.recType, m.recNum, m.recVers].filter(Boolean).join(' ')],
+    ['antena',               [m.antType, m.antNum].filter(Boolean).join(' ')],
+    ['pos. aprox. xyz',      m.approxPos],
+    ['offset antena h/e/n',  m.deltaHEN],
+    ['tipos de observación', typesDesc],
+    ['intervalo',            st && st.interval != null ? st.interval + ' s' : ''],
+    ['primera época',        epochStr(st && st.first)],
+    ['última época',         epochStr(st && st.last)],
+    ['épocas / satélites',   st ? (fmtN(st.epochs) + ' / ' + st.sats.size) : ''],
+    ['observaciones',        st ? fmtN(st.totalObs) : ''],
+    ['eventos (flag 2-5)',   String(P.events.length)]
+  ];
+}
+
+/* =============== filtrado teqc -O.obs (v3 / respaldo v2) =============== */
+const BAND_C = 'CWXSPDLIQMYBZNEUAGHJKORTV';
+const BAND_P = 'WPYXCSDIQMLBZNEUAGHJKORTV';
+const BAND_L = 'CWXPSDIQYMBZNEUAGHJKORTVL';
+const TYPE_ALIAS = { P: 'C' };
+
+function resolveV3(req, avail) {
+  if (avail.includes(req)) return req;
+  if (req.length >= 3) return null;
+  const want = TYPE_ALIAS[req[0]] || req[0];
+  const freq = req[1];
+  const cands = avail.filter(t => t.length === 3 && t[0] === want && t[1] === freq);
+  if (!cands.length) return null;
+  const pref = req[0] === 'P' ? BAND_P : (want === 'L' ? BAND_L : BAND_C);
+  cands.sort((a, b) => pref.indexOf(a[2]) - pref.indexOf(b[2]));
+  return cands[0];
+}
+
+function buildTeqcSel(P, reqs) {
+  const sel = { v2: P.verMajor === 2, idxs: [], mapV3: {}, pick: null };
+  if (sel.v2) {
+    for (const r of reqs) {
+      const idx = P.typesV2.indexOf(r);
+      if (idx >= 0) sel.idxs.push({ req: r, idx });
+    }
+  } else {
+    for (const sys of Object.keys(P.obsTypes)) {
+      const avail = P.obsTypes[sys], picks = [], used = new Set();
+      for (const r of reqs) {
+        const t = resolveV3(r, avail);
+        if (t && !used.has(t)) { used.add(t); picks.push({ req: r, type: t, idx: avail.indexOf(t) }); }
+      }
+      sel.mapV3[sys] = picks;
+    }
+  }
+  sel.pick = r => sel.v2 ? sel.idxs : (sel.mapV3[r.sat[0]] || []);
+  return sel;
+}
+function teqcStats(P, sel) {
+  let before = 0, after = 0, keptEp = 0, dropEp = 0;
+  for (const e of P.order) {
+    if (e.flag >= 2 && e.flag <= 5) continue;
+    for (const r of e.recs) for (const o of r.obs) if (o) before++;
+    const recs = e.recs.filter(r => sel.pick(r).length > 0);
+    if (recs.length) {
+      keptEp++;
+      for (const r of recs) for (const p of sel.pick(r)) if (r.obs[p.idx]) after++;
+    } else dropEp++;
+  }
+  return { before, after, keptEp, dropEp };
+}
+
+/* =============== escritores RINEX (base, usados por la ruta v3) =============== */
+function fmtObsVal(o) {
+  if (!o || isNaN(o.num)) return ' '.repeat(14);
+  if (o.raw && o.raw.length <= 14) return o.raw.padStart(14);
+  let s = o.num.toFixed(3);
+  if (s.length > 14) s = o.num.toPrecision(12);
+  return s.padStart(14);
+}
+const obsChunk = o => fmtObsVal(o) + ((o && o.lli) ? o.lli : ' ') + ((o && o.ssi) ? o.ssi : ' ');
+
+function writeBody(P, mode, sel) {
+  const out = [], v3 = P.verMajor === 3, per = v3 ? 13 : 5;
+  for (const e of P.order) {
+    const isEvent = e.flag >= 2 && e.flag <= 5;
+    let recs = e.recs;
+    if (mode === 'teqc') recs = e.recs.filter(r => sel.pick(r).length > 0);
+    if (mode === 'teqc' && !isEvent && recs.length === 0) continue;
+
+    const nsat = isEvent ? e.eventLines.length : recs.length;
+    let head;
+    if (v3) {
+      head = '> ' + String(e.y).padStart(4) + ' ' + pad2(e.mo) + ' ' + pad2(e.d) + ' ' + pad2(e.h) + ' ' + pad2(e.mi)
+           + e.sec.toFixed(7).padStart(11) + String(e.flag).padStart(3) + String(nsat).padStart(3);
+    } else {
+      head = String(e.y % 100).padStart(3) + pad3(e.mo) + pad3(e.d) + pad3(e.h) + pad3(e.mi)
+           + e.sec.toFixed(7).padStart(11) + String(e.flag).padStart(3) + String(nsat).padStart(3);
+    }
+    if (isEvent) { out.push(head); out.push(...e.eventLines); continue; }
+
+    let line = head;
+    for (let k = 0; k < recs.length; k++) {
+      if (k > 0 && k % 12 === 0) { out.push(line); line = ' '.repeat(32); }
+      line += recs[k].sat;
+    }
+    out.push(line);
+    for (const r of recs) {
+      const obs = mode === 'teqc' ? sel.pick(r).map(p => r.obs[p.idx]) : r.obs;
+      const chunks = obs.map(obsChunk);
+      for (let k = 0; k < chunks.length; k += per)
+        out.push((k === 0 ? r.sat : '   ') + chunks.slice(k, k + per).join(''));
+    }
+  }
+  return out.join('\n') + '\n';
+}
+
+function buildTypeHeaderLines(P, sel) {
+  const LBL = P.verMajor === 2 ? '# / TYPES OF OBSERV' : 'SYS / # / OBS TYPES';
+  const lines = [];
+  if (sel.v2) {
+    const types = sel.idxs.map(p => P.typesV2[p.idx]);
+    for (let k = 0; k < types.length; k += 9) {
+      const cnt = k === 0 ? String(types.length).padStart(6) : ' '.repeat(6);
+      lines.push((cnt + types.slice(k, k+9).map(t => '    ' + t).join('')).padEnd(60) + LBL);
+    }
+  } else {
+    for (const sys of Object.keys(sel.mapV3)) {
+      const types = sel.mapV3[sys].map(p => p.type);
+      if (!types.length) continue;
+      for (let k = 0; k < types.length; k += 13) {
+        const d = (k === 0 ? sys + String(types.length).padStart(3) : ' ' + String(types.length).padStart(3))
+                + types.slice(k, k+13).map(t => ' ' + t).join('');
+        lines.push(d.padEnd(60) + LBL);
+      }
+    }
+  }
+  return lines;
+}
+
+function writeRinex(P, mode, sel) {
+  let header = P.headerRaw;
+  if (mode === 'teqc') {
+    const newTypes = buildTypeHeaderLines(P, sel);
+    const out = [];
+    let inserted = false;
+    for (const L of P.headerRaw) {
+      const label = L.length > 60 ? L.slice(60).trim() : '';
+      if (/TYPES\s*OF\s*OBS|OBS\s*TYPES/i.test(label)) {
+        if (!inserted && newTypes.length) { inserted = true; out.push(...newTypes); }
+        continue;
+      }
+      out.push(L);
+    }
+    header = out;
+  }
+  return header.join('\n') + '\n' + writeBody(P, mode, sel);
+}
+
+/* =============== emulación exacta gfzrnx -chk / teqc -O.obs (RINEX 2) =============== */
+const GFZ_TAG   = 'gfzrnx-1.11-7513';
+const TEQC_TAG  = 'teqc  2019Feb25';
+const TEQC_PLAT = 'Linux2.6.32-573.12.1.el6.x86_64|x86_64|gcc|Win64-MinGW64|=+';
+const GFZ_V2_ORDER = ['C1','L1','L2','P2','C2','P1','C5','L5','P5','C6','L6','P6',
+                      'C7','L7','P7','C8','L8','P8','C9','L9','P9','S1','S2','D1','D2','D5','T1','T2'];
+const SYS_NAME = { G:'GPS', R:'GLONASS', E:'GALILEO', S:'SBAS', M:'MIXED', C:'BDS', J:'QZSS', I:'IRNSS' };
+
+function utcStamp() {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  return '' + d.getUTCFullYear() + p(d.getUTCMonth()+1) + p(d.getUTCDate()) + ' '
+       + p(d.getUTCHours()) + p(d.getUTCMinutes()) + p(d.getUTCSeconds());
+}
+function teqcDate() {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  return '' + d.getUTCFullYear() + p(d.getUTCMonth()+1) + p(d.getUTCDate()) + ' '
+       + p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()) + ':' + p(d.getUTCSeconds()) + 'UTC';
+}
+function sortTypesV2(types) {
+  const known = types.filter(t => GFZ_V2_ORDER.includes(t))
+                     .sort((a, b) => GFZ_V2_ORDER.indexOf(a) - GFZ_V2_ORDER.indexOf(b));
+  return known.concat(types.filter(t => !GFZ_V2_ORDER.includes(t)));
+}
+function sortedEpochs(P) {
+  return P.order.map((e, i) => [e, i]).sort((a, b) => (a[0].t - b[0].t) || (a[1] - b[1])).map(x => x[0]);
+}
+function sortedRecs(e) {
+  return e.recs.slice().sort((a, b) => (a.sat < b.sat ? -1 : a.sat > b.sat ? 1 : 0));
+}
+const f117 = sec => sec.toFixed(7).padStart(11);
+function epochHeadChk(e, nsat) {
+  return ' ' + String(e.y % 100).padStart(2, '0')
+       + ' ' + pad2(e.mo) + ' ' + pad2(e.d) + ' ' + pad2(e.h) + ' ' + pad2(e.mi)
+       + f117(e.sec) + String(e.flag).padStart(3) + String(nsat).padStart(3);
+}
+function epochHeadTeqc(e, nsat) {
+  return String(e.y % 100).padStart(3)
+       + String(e.mo).padStart(3) + String(e.d).padStart(3)
+       + String(e.h).padStart(3) + String(e.mi).padStart(3)
+       + f117(e.sec) + String(e.flag).padStart(3) + String(nsat).padStart(3);
+}
+function fmtObsChk(o) {
+  if (!o) return ' '.repeat(16);
+  return fmtObsVal(o) + (o.lli || ' ') + (o.ssi || ' ');
+}
+function fmtObsTeqc(o) {
+  if (!o) return ' '.repeat(16);
+  return fmtObsVal(o) + ((o.lli && o.lli !== '0') ? o.lli : ' ') + (o.ssi || ' ');
+}
+function typesLinesV2(types) {
+  const out = [];
+  for (let k = 0; k < types.length; k += 9) {
+    const head = k === 0 ? String(types.length).padStart(6) : ' '.repeat(6);
+    out.push((head + types.slice(k, k + 9).map(t => '    ' + t).join('')).padEnd(60) + '# / TYPES OF OBSERV');
+  }
+  return out;
+}
+function origTypesComment(types) {
+  const out = [];
+  for (let k = 0; k < types.length; k += 8)
+    out.push((' '.repeat(10) + types.slice(k, k + 8).map(t => t.padEnd(6)).join('')).padEnd(60) + 'COMMENT');
+  return out;
+}
+function v2VersionLine(P, sys, annot) {
+  const ver = P.version != null ? P.version.toFixed(2) : '2.11';
+  return ('     ' + ver + '           OBSERVATION DATA    ' + sys + (annot ? ' (' + annot + ')' : '')).padEnd(60) + 'RINEX VERSION / TYPE';
+}
+
+function buildChkHeaderLines(P, st, canon, perm) {
+  const H = [];
+  const sys = (P.sysGlobal && SYS_L.includes(P.sysGlobal)) ? P.sysGlobal : 'G';
+  const eps = sortedEpochs(P);
+  const nonEvt = eps.filter(e => !(e.flag >= 2 && e.flag <= 5));
+  const firstEp = nonEvt[0] || null;
+  const lastEp  = nonEvt.length ? nonEvt[nonEvt.length - 1] : null;
+  const satSet = new Set();
+  for (const e of nonEvt) for (const r of e.recs) if (r.sat) satSet.add(r.sat);
+  const sats = [...satSet].sort();
+
+  const counts = new Map();
+  for (const e of nonEvt) for (const r of e.recs) {
+    let arr = counts.get(r.sat);
+    if (!arr) { arr = new Array(canon.length).fill(0); counts.set(r.sat, arr); }
+    for (let j = 0; j < canon.length; j++) if (r.obs[perm[j]] != null) arr[j]++;
+  }
+
+  let timeSys = 'GPS';
+  for (const L of P.headerRaw)
+    if ((L.length > 60 ? L.slice(60).trim() : '') === 'TIME OF FIRST OBS') {
+      const m = L.slice(0, 55).match(/GLONASS|GPS|GAL|UTC|TAI/);
+      if (m) timeSys = m[0];
+      break;
+    }
+
+  const iv = st.interval != null ? st.interval : P.meta.interval;
+  const convLine = () => (GFZ_TAG.padEnd(20) + 'FILE CONVERSION'.padEnd(20) + utcStamp() + ' UTC').padEnd(60) + 'COMMENT';
+  const timeLine = (e, label) => (String(e.y).padStart(6) + String(e.mo).padStart(6) + String(e.d).padStart(6)
+    + String(e.h).padStart(6) + String(e.mi).padStart(6) + e.sec.toFixed(7).padStart(13) + '     ' + timeSys).padEnd(60) + label;
+
+  H.push(v2VersionLine(P, sys, null));
+  if (!P.headerRaw.some(L => (L.length > 60 ? L.slice(60).trim() : '') === 'PGM / RUN BY / DATE')) H.push(convLine());
+
+  let typesDone = false, sawFirst = false, sawLast = false, sawIv = false;
+  const pushTypesBlock = () => {
+    if (typesDone) return;
+    typesDone = true;
+    if (canon.join(' ') !== P.typesV2.join(' ')) H.push(...origTypesComment(P.typesV2));
+    H.push(...typesLinesV2(canon));
+    H.push(String(sats.length).padStart(6).padEnd(60) + '# OF SATELLITES');
+    for (const s of sats) {
+      const arr = counts.get(s) || new Array(canon.length).fill(0);
+      for (let k = 0; k < arr.length; k += 9) {
+        const head = k === 0 ? s.padStart(6) : ' '.repeat(6);
+        H.push((head + arr.slice(k, k + 9).map(c => String(c).padStart(6)).join('')).padEnd(60) + 'PRN / # OF OBS');
+      }
+    }
+  };
+
+  for (let k = 1; k < P.headerRaw.length; k++) {
+    const L = P.headerRaw[k];
+    const lbl = L.length > 60 ? L.slice(60).trim() : '';
+    if (lbl === 'END OF HEADER') {
+      pushTypesBlock();
+      if (!sawIv && iv != null) H.push(Number(iv).toFixed(3).padStart(10).padEnd(60) + 'INTERVAL');
+      if (!sawFirst && firstEp) H.push(timeLine(firstEp, 'TIME OF FIRST OBS'));
+      if (!sawLast && lastEp)   H.push(timeLine(lastEp, 'TIME OF LAST OBS'));
+      H.push(' '.repeat(60) + 'END OF HEADER');
+      continue;
+    }
+    if (/TYPES\s*OF\s*OBS|OBS\s*TYPES/i.test(lbl)) { pushTypesBlock(); continue; }
+    if (lbl === 'PGM / RUN BY / DATE') { H.push(L); H.push(convLine()); continue; }
+    if (lbl === 'INTERVAL') { sawIv = true; H.push(iv != null ? (Number(iv).toFixed(3).padStart(10).padEnd(60) + 'INTERVAL') : L); continue; }
+    if (lbl === 'TIME OF FIRST OBS') { sawFirst = true; H.push(L); continue; }
+    if (lbl === 'TIME OF LAST OBS')  { sawLast = true;  H.push(lastEp ? timeLine(lastEp, 'TIME OF LAST OBS') : L); continue; }
+    if (lbl === '# OF SATELLITES' || lbl === 'PRN / # OF OBS') continue;
+    H.push(L);
+  }
+  if (!typesDone) pushTypesBlock();
+  return H.map(L => L.length < 80 ? L.padEnd(80) : L);
+}
+
+function writeBody2(P, teqc, perm, selPos) {
+  const out = [], per = 5;
+  const fmt = teqc ? fmtObsTeqc : fmtObsChk;
+  for (const e of sortedEpochs(P)) {
+    const isEvent = e.flag >= 2 && e.flag <= 5;
+    if (isEvent) {
+      out.push(teqc ? epochHeadTeqc(e, 0) : epochHeadChk(e, 0).padEnd(68));
+      out.push(...e.eventLines);
+      continue;
+    }
+    const recs = sortedRecs(e);
+    if (teqc && !recs.length) continue;
+    const sats = recs.map(r => r.sat);
+    let line = teqc ? epochHeadTeqc(e, recs.length) : epochHeadChk(e, recs.length);
+    for (let k = 0; k < sats.length; k++) {
+      line += sats[k];
+      if ((k + 1) % 12 === 0) { out.push(teqc ? line : line.padEnd(68)); line = ' '.repeat(32); }
+    }
+    if (!(sats.length % 12 === 0 && sats.length > 0)) out.push(teqc ? line : line.padEnd(68));
+    for (const r of recs) {
+      const vals = selPos ? selPos.map(j => fmt(r.obs[perm[j]]))
+                          : perm.map(oi => fmt(r.obs[oi]));
+      for (let k = 0; k < vals.length; k += per)
+        out.push((k === 0 ? r.sat : '   ') + vals.slice(k, k + per).join(''));
+    }
+  }
+  return out.join('\n') + '\n';
+}
+
+function buildChkText(P, st) {
+  if (P.verMajor === 2 && P.typesV2.length) {
+    const canon = sortTypesV2(P.typesV2);
+    const perm  = canon.map(t => P.typesV2.indexOf(t));
+    const headerLines = buildChkHeaderLines(P, st, canon, perm);
+    return {
+      v2: true, canon, perm,
+      reordered: canon.join(' ') !== P.typesV2.join(' '),
+      headerLines,
+      text: headerLines.join('\n') + '\n' + writeBody2(P, false, perm, null)
+    };
+  }
+  return { v2: false, canon: null, perm: null, reordered: false, headerLines: null,
+           text: writeRinex(P, 'chk', null) };
+}
+
+function buildTeqcHeaderLines(P, st, chkH, selTypes) {
+  const sys = (P.sysGlobal && SYS_L.includes(P.sysGlobal)) ? P.sysGlobal : 'G';
+  const iv = st.interval != null ? st.interval : P.meta.interval;
+  const out = [];
+  const hasPgm = chkH.some(L => (L.length > 60 ? L.slice(60).trim() : '') === 'PGM / RUN BY / DATE');
+  let pgmDone = false, typesDone = false;
+  const teqcPgm = () => {
+    out.push((TEQC_TAG.padEnd(20) + ' '.repeat(20) + teqcDate()).padEnd(60) + 'PGM / RUN BY / DATE');
+    out.push(TEQC_PLAT.padEnd(60) + 'COMMENT');
+  };
+  for (const L0 of chkH) {
+    const L = L0.replace(/\s+$/, '');
+    const lbl = L.length > 60 ? L.slice(60).trim() : '';
+    if (lbl === 'RINEX VERSION / TYPE') {
+      out.push(v2VersionLine(P, sys, SYS_NAME[sys] || 'MIXED'));
+      if (!hasPgm) { teqcPgm(); pgmDone = true; }
+      continue;
+    }
+    if (lbl === 'PGM / RUN BY / DATE') {
+      if (!pgmDone) {
+        pgmDone = true;
+        const orig = L.slice(0, 60).replace(/\s+$/, '');
+        teqcPgm();
+        if (orig.trim()) out.push(orig.padEnd(60) + 'COMMENT');
+      }
+      continue;
+    }
+    if (lbl === '# OF SATELLITES' || lbl === 'PRN / # OF OBS' || lbl === 'TIME OF LAST OBS') continue;
+    if (lbl === 'INTERVAL') { out.push(iv != null ? (Number(iv).toFixed(4).padStart(11).padEnd(60) + 'INTERVAL') : L); continue; }
+    if (/TYPES\s*OF\s*OBS|OBS\s*TYPES/i.test(lbl)) {
+      if (!typesDone) { typesDone = true; out.push(...typesLinesV2(selTypes)); }
+      continue;
+    }
+    out.push(L);
+  }
+  if (!typesDone) out.push(...typesLinesV2(selTypes));
+  return out;
+}
+
+function buildTeqcText(P, st, built, obsReq) {
+  const reqSet = new Set(obsReq);
+  if (built.v2) {
+    const selPos = [];
+    built.canon.forEach((t, j) => { if (reqSet.has(t)) selPos.push(j); });
+    if (!selPos.length) return { error: 'ninguno de los tipos solicitados (' + obsReq.join(' ') + ') existe en el archivo' };
+    const selTypes = selPos.map(j => built.canon[j]);
+    return {
+      v2: true, selPos, selTypes,
+      text: buildTeqcHeaderLines(P, st, built.headerLines, selTypes).join('\n') + '\n'
+          + writeBody2(P, true, built.perm, selPos)
+    };
+  }
+  const selT = buildTeqcSel(P, obsReq);
+  return { v2: false, selT, text: writeRinex(P, 'teqc', selT) };
+}
+
+function teqcStatsV2(P, perm, selPos) {
+  let before = 0, after = 0, keptEp = 0, dropEp = 0;
+  for (const e of P.order) {
+    if (e.flag >= 2 && e.flag <= 5) continue;
+    for (const r of e.recs) for (const o of r.obs) if (o) before++;
+    if (e.recs.length && selPos.length) {
+      keptEp++;
+      for (const r of e.recs) for (const j of selPos) if (r.obs[perm[j]]) after++;
+    } else dropEp++;
+  }
+  return { before, after, keptEp, dropEp };
+}
+
+/* =============== archivos (FS Access API + respaldo) =============== */
+function isRinexName(n) {
+  const m = n.match(/\.([A-Za-z0-9]{1,3})$/);
+  if (!m) return false;
+  if (m[1].toLowerCase().charAt(m[1].length - 1) !== 'o') return false;
+  if (/_chk$/i.test(n) || /teqc/i.test(n)) return false;
+  return true;
+}
+async function readFileText(f) {
+  const file = f.handle ? await f.handle.getFile() : f.file;
+  return file.text();
+}
+
+/* guardado robusto: un fallo de escritura ya no rompe el pipeline */
+async function saveOutput(name, text) {
+  if (state.mode === 'fs' && state.dir) {
+    try {
+      const fh = await state.dir.getFileHandle(name, { create: true });
+      const w  = await fh.createWritable();
+      await w.write(text);
+      await w.close();
+      return { saved: true, name, text };
+    } catch (e) {
+      toast('No se pudo escribir «' + name + '» (permiso de solo lectura)', 'err');
+      return { saved: false, name, text };
+    }
+  }
+  return { saved: false, name, text };
+}
+function downloadText(name, text) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'application/octet-stream' }));
+  a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 8000);
+  toast('descargando ' + name);
+}
+function buildNames(name, sufChk, sufTqc) {
+  const di = name.lastIndexOf('.');
+  const base = di > 0 ? name.slice(0, di) : name;
+  const ext  = di > 0 ? name.slice(di) : '';
+  return { chk: name + sufChk, teqc: base + sufTqc + ext };
+}
+
+async function connectFolder() {
+  if (!state.fs) { $('#inDir').click(); return; }
+  try {
+    state.dir = await window.showDirectoryPicker({ mode: 'readwrite' });
+    state.dirName = state.dir.name;
+    state.mode = 'fs';
+    const q = { mode: 'readwrite' };
+    let perm = await state.dir.queryPermission(q);
+    if (perm !== 'granted') perm = await state.dir.requestPermission(q);
+    state.canWrite = perm === 'granted';
+    toast('Carpeta conectada: ' + state.dirName + (state.canWrite ? '' : ' (solo lectura)'), state.canWrite ? undefined : 'warn');
+    if (!state.canWrite) toast('Concede «Editar archivos» para que las salidas se guarden en la carpeta', 'warn');
+    await scanFolder();
+  } catch (e) {
+    if (e.name === 'SecurityError') {
+      degradeToFallback();
+      toast('Este contexto no permite escribir en carpeta — usa «generar PIPELINE_RINEX.bat»', 'warn');
+    } else if (e.name !== 'AbortError') {
+      toast('No se pudo abrir la carpeta: ' + e.message, 'err');
+    }
+  }
+}
+function degradeToFallback() {
+  state.fs = false;
+  setFsBadge(false);
+  $('#fsBtns').style.display = 'none';
+  $('#memBtns').style.display = '';
+}
+async function scanFolder() {
+  if (state.mode !== 'fs' || !state.dir) return;
+  const files = [];
+  state.exes = { gfzrnx: null, teqc: null };
+  for await (const [name, h] of state.dir.entries()) {
+    if (h.kind !== 'file') continue;
+    if (/^(gfzrnx|teqc)\.exe$/i.test(name)) {
+      try { state.exes[name.toLowerCase().split('.')[0]] = (await h.getFile()).size; } catch {}
+    } else if (isRinexName(name)) {
+      let size = 0;
+      try { size = (await h.getFile()).size; } catch {}
+      files.push({ name, size, handle: h, sel: true, done: false });
+    }
+  }
+  state.files = files;
+  renderFiles(); renderExes(); updateRunBtn();
+  toast(files.length + ' archivo(s) RINEX · gfzrnx.exe ' + (state.exes.gfzrnx != null ? 'presente' : 'ausente') + ' · teqc.exe ' + (state.exes.teqc != null ? 'presente' : 'ausente'));
+}
+
+/* =============== render de interfaz =============== */
+function renderFiles() {
+  const box = $('#fileList');
+  box.innerHTML = '';
+  if (!state.files.length) {
+    box.innerHTML = '<div class="empty">' + (state.dirName ? 'sin archivos *.?o en «' + esc(state.dirName) + '»' : 'sin carpeta conectada') + '</div>';
+  }
+  for (const f of state.files) {
+    const row = document.createElement('label');
+    row.className = 'frow';
+    row.innerHTML = '<input type="checkbox" ' + (f.sel ? 'checked' : '') + '/>'
+      + '<span class="fname" title="' + esc(f.name) + '">' + esc(f.name) + '</span>'
+      + '<span class="fsize">' + fmtKB(f.size) + '</span>'
+      + (f.done ? '<span class="st">✓</span>' : '');
+    row.querySelector('input').addEventListener('change', ev => { f.sel = ev.target.checked; updateRunBtn(); });
+    box.appendChild(row);
+  }
+  $('#fileCount').textContent = state.files.length + ' archivo(s) · ' + state.files.filter(f => f.sel).length + ' sel.';
+}
+function renderExes() {
+  for (const key of ['gfzrnx', 'teqc']) {
+    const size = state.exes[key];
+    const el = $('#exe-' + key);
+    el.querySelector('.dot').className = 'dot ' + (size != null ? 'on' : 'off');
+    el.querySelector('.stt').textContent = size != null ? ('en carpeta · ' + fmtKB(size))
+      : (state.mode === 'fs' ? 'no encontrado en la carpeta' : 'sin carpeta conectada');
+  }
+}
+function updateRunBtn() {
+  const b = $('#btnRun');
+  if (state.running) { b.disabled = true; b.innerHTML = ICO.spin + '<span>PROCESANDO…</span>'; }
+  else {
+    const n = state.files.filter(f => f.sel).length;
+    b.disabled = !n;
+    b.innerHTML = ICO.play + '<span>EJECUTAR PIPELINE</span>';
+  }
+  const bat = $('#btnBat');
+  if (bat) bat.disabled = state.running;
+}
+function progress(i, n) {
+  $('#pfill').style.width = n ? (100 * i / n) + '%' : '0%';
+  const sp = $('#btnRun span');
+  if (sp) sp.textContent = 'PROCESANDO ' + i + '/' + n + '…';
+}
+function setFsBadge(on) {
+  const b = $('#fsBadge');
+  b.className = 'badge ' + (on ? 'on' : 'off');
+  b.textContent = on ? 'escritura directa' : 'modo descarga';
+}
+function setNode(id, cls, v) {
+  const n = $('#' + id);
+  n.classList.remove('done', 'active');
+  if (cls) n.classList.add(cls);
+  if (v != null) n.querySelector('.v').textContent = v;
+}
+function resetNodes() {
+  setNode('nSrc', null, '—'); setNode('nChk', null, '-chk -kv -f');
+  setNode('nOut', null, '—'); setNode('nTqc', null, $('#vTqc').textContent); setNode('nEnd', null, '—');
+}
+function parseObsReq(s) {
+  return (String(s).toUpperCase().replace(/[^A-Z0-9]/g, '').match(/[A-Z]\d(?:[A-Z](?!\d))?/g) || []);
+}
+
+/* =============== salida de consola idéntica a gfzrnx / teqc =============== */
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function localStamp() {
+  const d = new Date();
+  return d.getFullYear() + '-' + pad2(d.getMonth()+1) + '-' + pad2(d.getDate()) + ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds());
+}
+function gfzConsole(P, F, fname) {
+  const site = (fname.replace(/\.[^.]*$/, '').slice(0, 4).toUpperCase() + '____').slice(0, 4);
+  const rows = [];
+  for (const t of P.crux || []) rows.push(['W', 'CRUX: obs. type ' + t]);
+  con.blank();
+  if (rows.length) {
+    con.line('DATE/TIME           | C | EPOCH / FILE            | SITE | T | MESSAGE');
+    con.line('--------------------+---+-------------------------+------+---+' + '-'.repeat(40) + '...');
+    const ts = localStamp();
+    for (const [c, m] of rows)
+      con.line(esc(ts + ' | ' + c + ' | 0000-00-00 00:00:00.000 | ' + site + ' | O | ' + m));
+  }
+  con.blank(); con.blank();
+}
+function teqcConsole(P, chkName) {
+  const eps = sortedEpochs(P).filter(e => !(e.flag >= 2 && e.flag <= 5) && e.recs.length);
+  let min = Infinity;
+  for (let k = 1; k < eps.length; k++) { const d = (eps[k].t - eps[k-1].t) / 1000; if (d > 0 && d < min) min = d; }
+  if (!isFinite(min)) return;
+  for (let k = 1; k < eps.length; k++) {
+    const d = (eps[k].t - eps[k-1].t) / 1000;
+    if (d > min + 1e-6) {
+      const e = eps[k];
+      const when = e.y + ' ' + MON[e.mo-1] + ' ' + pad2(e.d) + ' ' + pad2(e.h) + ':' + pad2(e.mi) + ':' + e.sec.toFixed(3).padStart(6, '0');
+      con.line(esc("! Notice ! '" + chkName + "' @ " + when + ': poss. incr. of sampling int. OR data gap of ' + d.toFixed(3) + ' seconds (min. dt found= ' + min.toFixed(3) + ' s)'));
+    }
+  }
+}
+
+/* =============== fichas de resultado =============== */
+function renderResults() {
+  const box = $('#results');
+  box.innerHTML = '';
+  $('#resCount').textContent = state.results.length + ' archivo(s)';
+  $('#btnDlAll').style.display = state.results.some(r => r.outs.length) ? '' : 'none';
+  if (!state.results.length) { box.innerHTML = '<div class="empty">aún no hay procesamientos — ejecuta el pipeline</div>'; return; }
+  for (const R of state.results.slice().reverse()) {
+    const c = document.createElement('div');
+    c.className = 'card';
+    let flow = '<div class="fchip">' + ICO.check + '<span class="nmm">' + esc(R.src) + '</span></div>';
+    for (const o of R.outs)
+      flow += '<span class="farrow">→</span><span class="fop">' + esc(o.op) + '</span><span class="farrow">→</span>'
+           + '<div class="fchip">' + ICO.check + '<span class="nmm">' + esc(o.name) + '</span></div>';
+    if (R.error) flow += '<span class="farrow">→</span><div class="fchip err">' + ICO.cross + '<span class="ferr">' + esc(R.error) + '</span></div>';
+    flow += '<span class="fsize">' + fmtKB(R.size) + '</span>';
+    let meta = '';
+    for (const [k, v] of R.kv.slice(1)) meta += '<div class="mk">' + esc(k) + '</div><div class="mv" title="' + esc(v || '') + '">' + esc(v === '' || v == null ? '—' : v) + '</div>';
+    const nW = R.F.filter(f => f.lv === 'wn').length, nE = R.F.filter(f => f.lv === 'er').length;
+    let fl = '';
+    for (const f of R.F) fl += '<li><span class="lv ' + f.lv + '">' + (f.lv === 'ok' ? 'OK' : f.lv === 'wn' ? 'AVISO' : 'ERROR') + '</span><span>' + esc(f.msg) + '</span></li>';
+    let acts = '';
+    R.outs.forEach((o, k) => acts += '<button class="mini" data-k="' + k + '">' + ICO.down + '<span>' + esc(o.name) + (o.saved ? ' · guardado' : '') + '</span></button>');
+    c.innerHTML = '<div class="flow">' + flow + '</div>'
+      + '<div class="meta">' + meta + '</div>'
+      + '<details><summary>hallazgos · ' + R.F.length + ' (' + nW + ' avisos, ' + nE + ' errores)</summary><ul class="findlist">' + fl + '</ul></details>'
+      + (acts ? '<div class="actions">' + acts + '</div>' : '');
+    c.querySelectorAll('button[data-k]').forEach(b => b.addEventListener('click', () => { const o = R.outs[+b.dataset.k]; downloadText(o.name, o.text); }));
+    box.appendChild(c);
+  }
+}
+
+/* =============== pipeline =============== */
+async function runPipeline() {
+  const sel = state.files.filter(f => f.sel);
+  if (!sel.length || state.running) return;
+  const obsReq = parseObsReq($('#pObs').value);
+  if (!obsReq.length) { toast('Indica al menos un tipo de observación (p. ej. C1L1L2P2)', 'err'); return; }
+  const sufChk = $('#pChk').value.trim() || '_chk';
+  const sufTqc = $('#pTqc').value.trim() || 'teqc';
+  state.running = true; updateRunBtn();
+  const canDisk = state.mode === 'fs' && state.dir && state.canWrite;
+  let ok = 0, bad = 0;
+  try {
+    for (let n = 0; n < sel.length; n++) {
+      const f = sel[n];
+      progress(n, sel.length);
+      resetNodes();
+      const names = buildNames(f.name, sufChk, sufTqc);
+      const R = { src: f.name, size: f.size, outs: [], F: [], kv: [], error: null };
+      setNode('nSrc', 'active', f.name);
+      await nextFrame();
+      try {
+        const text = await readFileText(f);
+        setNode('nSrc', 'done');
+        setNode('nChk', 'active');
+        await con.cmd('gfzrnx -finp ' + f.name + ' -fout ' + names.chk + ' -chk -kv -f');
+        const P = parseRinex(text, f.name);
+        const { F, st } = runCheck(P);
+        R.F = F; R.kv = kvRows(P, st, f.name);
+        gfzConsole(P, F, f.name);
+        if (P.fatal.length) throw new Error(P.fatal.join(' · '));
+        if (P.fileType !== 'O') throw new Error('no es un archivo de observaciones');
+        const built = buildChkText(P, st);
+        const s1 = await saveOutput(names.chk, built.text);
+        R.outs.push({ op: 'gfzrnx -chk', name: names.chk, text: built.text, saved: s1.saved });
+        setNode('nChk', 'done'); setNode('nOut', 'done', names.chk);
+        setNode('nTqc', 'active');
+        await con.cmd('teqc -O.obs ' + obsReq.join('') + ' ' + names.chk + ' > ' + names.teqc);
+        const T = buildTeqcText(P, st, built, obsReq);
+        if (T.error) throw new Error(T.error);
+        teqcConsole(P, names.chk);
+        const ts = T.v2 ? teqcStatsV2(P, built.perm, T.selPos) : teqcStats(P, T.selT);
+        const s2 = await saveOutput(names.teqc, T.text);
+        R.outs.push({ op: 'teqc -O.obs', name: names.teqc, text: T.text, saved: s2.saved });
+        con.blank();
+        setNode('nTqc', 'done'); setNode('nEnd', 'done', names.teqc);
+        f.done = true; ok++;
+      } catch (e) {
+        R.error = e.message || String(e);
+        con.line(esc('ERROR: ' + R.error)); con.blank();
+        bad++;
+      }
+      state.results.push(R);
+      renderResults(); renderFiles();
+    }
+    progress(sel.length, sel.length);
+    con.prompt();
+    void ('pipeline terminado: ' + ok + ' correcto(s), ' + bad + ' con error', bad ? 'wn' : 'ok');
+    if (!canDisk && ok) toast('Salidas listas para descargar en cada ficha', 'warn');
+    toast('Pipeline terminado: ' + ok + ' ok · ' + bad + ' error(es)', bad ? 'warn' : undefined);
+  } finally {
+    state.running = false; updateRunBtn();
+  }
+}
+
+/* =============== generador PIPELINE_RINEX.bat =============== */
+function buildBat() {
+  const obs = parseObsReq($('#pObs').value).join('') || 'C1L1L2P2';
+  const sufChk = $('#pChk').value.trim() || '_chk';
+  const sufTqc = $('#pTqc').value.trim() || 'teqc';
+  return [
+    '@echo off',
+    'setlocal EnableDelayedExpansion',
+    'cd /d "%~dp0"',
+    'title PIPELINE RINEX - gfzrnx + teqc',
+    'if not exist gfzrnx.exe ( echo [ERROR] falta gfzrnx.exe en esta carpeta & pause & exit /b 1 )',
+    'if not exist teqc.exe ( echo [ERROR] falta teqc.exe en esta carpeta & pause & exit /b 1 )',
+    'set /a N=0',
+    'for %%F in (*.??o) do (',
+    '  echo %%~nxF | findstr /i /c:"' + sufTqc + '" >nul',
+    '  if errorlevel 1 (',
+    '    set /a N+=1',
+    '    echo ------------------------------------------------------------',
+    '    echo [!N!] %%~nxF',
+    '    gfzrnx -finp "%%~nxF" -fout "%%~nxF' + sufChk + '" -chk -kv -f',
+    '    teqc -O.obs ' + obs + ' "%%~nxF' + sufChk + '" > "%%~nF' + sufTqc + '%%~xF"',
+    '    echo     salidas: %%~nxF' + sufChk + '  y  %%~nF' + sufTqc + '%%~xF',
+    '  )',
+    ')',
+    'echo ------------------------------------------------------------',
+    'echo Terminado: !N! archivo(s) procesado(s).',
+    'pause',
+    ''
+  ].join('\r\n');
+}
+
+/* =============== eventos =============== */
+function loadMemFiles(list) {
+  state.mode = 'mem';
+  state.exes = { gfzrnx: state.exes.gfzrnx, teqc: state.exes.teqc };
+  const files = [];
+  let dirName = '';
+  for (const file of list) {
+    const rel = file.webkitRelativePath || '';
+    if (rel && !dirName) dirName = rel.split('/')[0];
+    if (/^(gfzrnx|teqc)\.exe$/i.test(file.name)) { state.exes[file.name.toLowerCase().split('.')[0]] = file.size; continue; }
+    if (isRinexName(file.name)) files.push({ name: file.name, size: file.size, file, sel: true, done: false });
+  }
+  state.dirName = dirName || state.dirName || 'ARCHIVOS';
+  state.files = files;
+  renderFiles(); renderExes(); updateRunBtn();
+  toast('Cargados ' + files.length + ' archivo(s) RINEX', files.length ? undefined : 'warn');
+}
+
+$('#btnConnect').addEventListener('click', connectFolder);
+$('#btnScan').addEventListener('click', () => state.mode === 'fs' ? scanFolder() : toast('Primero conecta una carpeta', 'warn'));
+$('#btnPickDir').addEventListener('click', () => $('#inDir').click());
+$('#btnPickFiles').addEventListener('click', () => $('#inFiles').click());
+$('#inDir').addEventListener('change', e => { if (e.target.files.length) loadMemFiles(e.target.files); e.target.value = ''; });
+$('#inFiles').addEventListener('change', e => { if (e.target.files.length) loadMemFiles(e.target.files); e.target.value = ''; });
+
+let exeTarget = null;
+$('#ldGfzrnx').addEventListener('click', () => { exeTarget = 'gfzrnx'; $('#inExe').click(); });
+$('#ldTeqc').addEventListener('click', () => { exeTarget = 'teqc'; $('#inExe').click(); });
+$('#inExe').addEventListener('change', async e => {
+  const file = e.target.files[0]; e.target.value = '';
+  if (!file || !exeTarget) return;
+  state.exes[exeTarget] = file.size;
+  if (state.mode === 'fs' && state.dir && state.canWrite) {
+    try {
+      const fh = await state.dir.getFileHandle(exeTarget + '.exe', { create: true });
+      const w = await fh.createWritable(); await w.write(file); await w.close();
+      toast(exeTarget + '.exe copiado a la carpeta');
+    } catch (err) { toast('No se pudo copiar ' + exeTarget + '.exe: ' + err.message, 'err'); }
+  }
+  renderExes();
+});
+
+$('#btnRun').addEventListener('click', runPipeline);
+$('#btnBat').addEventListener('click', () => downloadText('PIPELINE_RINEX.bat', buildBat()));
+$('#btnDlAll').addEventListener('click', async () => {
+  for (const R of state.results) for (const o of R.outs) { downloadText(o.name, o.text); await sleep(250); }
+});
+$('#btnClear').addEventListener('click', () => con.clear());
+$('#btnCopy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(con.el.innerText); toast('consola copiada'); }
+  catch { toast('No se pudo copiar la consola', 'err'); }
+});
+$('#pObs').addEventListener('input', e => {
+  const v = parseObsReq(e.target.value).join('') || '—';
+  $('#vTqc').textContent = v;
+});
+
+/* =============== inicio =============== */
+if (!state.fs) degradeToFallback(); else setFsBadge(true);
+con.banner();
+con.prompt();
+renderFiles(); renderExes(); updateRunBtn();
+})();
+</script>
+</body>
+</html>
